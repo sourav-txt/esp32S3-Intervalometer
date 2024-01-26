@@ -15,20 +15,20 @@
 #include <ESPAsyncWebSrv.h>
 //////////////LED ///////////////////
 #include <FastLED.h>
-const int NUM_LEDS = 1;   //Number of RGB LED beads
+#define NUM_LEDS 1         //Number of RGB LED beads
 #define LED_TYPE WS2812B  //RGB LED strip type
-CRGB leds[NUM_LEDS];      //Instantiate RGB LED
+CRGB leds[NUM_LEDS];       //Instantiate RGB LED
 ////////////////////////////////////
-#define RGB_PIN 21  //The pin for controlling RGB LED //D8 for DFROBOT
-const int focusPin = 17;
-const int shutterPin = 18;
+#define RGB_PIN 21        //The pin for controlling RGB LED //D8 for DFROBOT
+int focusPin = 17;
+int shutterPin = 18;
 /////////////////////////////////////
 
 bool intrvalmtrMode = false;
-int timeDelay = 50;   // initial delay before taking first shot
-int intShutter = 50;  // shutter open time
-int Interval = 100;   // delay between shots
-int Shots = 1;        //number of shots
+int Delay = 50;
+int Shutter= 100;
+int Interval= 100;
+int Shots= 1;
 
 
 // The remote service we wish to connect to.
@@ -46,54 +46,39 @@ static BLEAdvertisedDevice* myDevice;
 
 AsyncWebServer server(80);
 
-const char* ssid = "RemoteShutterAP";
-const char* password = "76020158";
+const char* ssid = "ddwrt";
+const char* password = "Ngjm99erTL5ikD";
 
-void notFound(AsyncWebServerRequest* request) {
+void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found");
 }
-void shutter(int intShutter = 50) {  //default value passed incase only shutter required
-  CRGB lastcolor = leds[0];
-  leds[0] = CRGB::Red;  //LED shows red light
-  FastLED.show();
+void shutter(int delayTime = 50) {
   digitalWrite(focusPin, HIGH);
   //Serial.print("Focus ");
-  delay(intShutter);
+  delay(100);
   digitalWrite(shutterPin, HIGH);
-  //Serial.print("intShutter \n");
+  //Serial.print("Shutter \n");
   //Serial.println("");
+  delay(delayTime);
   digitalWrite(shutterPin, LOW);
   digitalWrite(focusPin, LOW);
-  leds[0] = lastcolor;  // set our current dot to black before we continue
-  FastLED.show();
 }
 
 static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify) {
   if (pData[0] == 0x1) {
-    if (intrvalmtrMode) {
-      delay(timeDelay);  //initial delay
-      int tmpShots= Shots;
-      while (tmpShots > 0) {
-        delay(Interval);      //delay between shots in microsec
-        shutter(intShutter);  // pass shutter opening time in microsec
-        tmpShots=tmpShots-1;    // decrement number of shots remaining
-        Serial.print("Shots Remaining ");
-        Serial.print(tmpShots);
-        Serial.print("\n");
-      }
-    } else {
-      shutter();
-    }
-
+    CRGB lastcolor = leds[0];
+    leds[0] = CRGB::Red;  //LED shows red light
+    FastLED.show();
+    shutter();
     Serial.println("Delay :");
-    Serial.println(timeDelay);
+    Serial.println(Delay);
     Serial.println("Shutter: ");
-    Serial.println(intShutter);
+    Serial.println(Shutter);
     Serial.println("Interval: ");
     Serial.println(Interval);
     Serial.println("Shots: ");
     Serial.println(Shots);
-#ifdef DEBUG
+    #ifdef DEBUG
     Serial.print("Notify callback for characteristic ");
     Serial.print(pBLERemoteCharacteristic->getUUID().toString().c_str());
     Serial.print(" of data length ");
@@ -109,7 +94,10 @@ static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic, ui
     } else if (pData[0] == 0x02 && pData[2] != 0x0) {
       Serial.printf("string_2: %c", shift_keys[pData[2]]);
     }
-#endif
+    #endif
+
+    leds[0] = lastcolor;  // set our current dot to black before we continue
+    FastLED.show();
   }
 }
 
@@ -217,22 +205,22 @@ const char index_html[] PROGMEM = R"rawliteral(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   </head><body>
   <form action="/get">
-    Delay: <input type="text" name="Delay" placeholder="Intitial Delay before 1st shot">
+    Delay: <input type="text" name="Delay">
     <input type="submit" value="Submit">
   </form><br>
   <form action="/get">
-    Shutter: <input type="text" name="Shutter" placeholder="Shutter kept open in ms">
+    Shutter: <input type="text" name="Shutter">
     <input type="submit" value="Submit">
   </form><br>
   <form action="/get">
-    Interval: <input type="text" name="Interval" placeholder="Interval Between Shots">
+    Interval: <input type="text" name="Interval">
     <input type="submit" value="Submit">
   </form><br>
   <form action="/get">
-    Shots: <input type="text" name="Shots" placeholder="Number of Shots">
+    Shots: <input type="text" name="Shots">
     <input type="submit" value="Submit">
   </form>
-  <h2>Enable/Disable Intervalometer Mode </h2>
+  <h2>ESP Web Server</h2>
   %BUTTONPLACEHOLDER%
 <script>function toggleCheckbox(element) {
   var xhr = new XMLHttpRequest();
@@ -262,105 +250,85 @@ setInterval(function ( ) {
   xhttp.send();
 }, 1000 ) ;
 </script>
-<p>Delay: %PLACEHOLDER_DELAY% </p>
-<p>Shutter: %PLACEHOLDER_SHUTTER% </p>
-<p>Interval: %PLACEHOLDER_INTERVAL% </p>
-<p>Number of Shots: %PLACEHOLDER_SHOTS% </p>
 </body></html>)rawliteral";
 
 // Replaces placeholder with button section in your web page
-String processor(const String& var) {
+String processor(const String& var){
   //Serial.println(var);
-  if (var == "BUTTONPLACEHOLDER") {
-    String buttons = "";
+  if(var == "BUTTONPLACEHOLDER"){
+    String buttons ="";
     String outputStateValue = outputState();
-    buttons += "<h4>Intervalometer Mode <span id=\"outputState\"></span></h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"output\" " + outputStateValue + "><span class=\"slider\"></span></label>";
+    buttons+= "<h4>Intervalometer Mode <span id=\"outputState\"></span></h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"output\" " + outputStateValue + "><span class=\"slider\"></span></label>";
     return buttons;
   }
-   if(var == "PLACEHOLDER_DELAY"){
-    return String(timeDelay/1000);
-  }
-   if(var == "PLACEHOLDER_SHUTTER"){
-    return String(intShutter);
-  }
-   if(var == "PLACEHOLDER_INTERVAL"){
-    return String(Interval);
-  }
-   if(var == "PLACEHOLDER_SHOTS"){
-    return String(Shots);
-  }  
   return String();
 }
 
-String outputState() {
-  if (intrvalmtrMode) {
+String outputState(){
+  if(intrvalmtrMode){
     return "checked";
-  } else {
+  }
+  else {
     return "";
   }
   return "";
 }
 
-void wifisetup() {  ////////////////////////////////wifi setup//////////////////////
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password);
-  Serial.println(WiFi.softAPIP());
-  Serial.print("[+] AP Created with IP Gateway ");
-  Serial.println(WiFi.softAPIP());
+void wifisetup(){////////////////////////////////wifi setup//////////////////////
+    WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("WiFi Failed!");
+    return;
+  }
   Serial.println();
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
 
   // Send web page with input fields to client
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html, processor);
   });
 
   // Send a GET request to <ESP_IP>/get?Delay=<inputMessage>
-  server.on("/get", HTTP_GET, [](AsyncWebServerRequest* request) {
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
     // GET Delay value on <ESP_IP>/get?Delay=<inputMessage>
     if (request->hasParam(PARAM_INPUT_1)) {
       inputMessage = request->getParam(PARAM_INPUT_1)->value();
       inputParam = PARAM_INPUT_1;
-      timeDelay = inputMessage.toInt();
-      
-      Serial.println("Initial Time Delay : ");
-      Serial.println(timeDelay);
-      timeDelay= timeDelay*1000;
+      Delay = inputMessage.toInt();
     }
     // GET Shutter value on <ESP_IP>/get?Shutter=<inputMessage>
     else if (request->hasParam(PARAM_INPUT_2)) {
       inputMessage = request->getParam(PARAM_INPUT_2)->value();
       inputParam = PARAM_INPUT_2;
-      intShutter = inputMessage.toInt();
-      Serial.println("Shutter Open time : ");
-      Serial.println(intShutter);
+      Shutter= inputMessage.toInt();
     }
     // GET Interval value on <ESP_IP>/get?Interval=<inputMessage>
     else if (request->hasParam(PARAM_INPUT_3)) {
       inputMessage = request->getParam(PARAM_INPUT_3)->value();
       inputParam = PARAM_INPUT_3;
-      Interval = inputMessage.toInt();
-      Serial.println("Interval: ");
-      Serial.println(Interval);
-
-    } else if (request->hasParam(PARAM_INPUT_4)) {
+      Interval=inputMessage.toInt();
+      
+    }
+     else if (request->hasParam(PARAM_INPUT_4)) {
       inputMessage = request->getParam(PARAM_INPUT_4)->value();
       inputParam = PARAM_INPUT_4;
-      Shots = inputMessage.toInt();
-      Serial.println("No of Shots: ");
-      Serial.println(Shots);
-    } else {
+      Shots=inputMessage.toInt();
+    }
+    else {
       inputMessage = "Form submit error";
       inputParam = "none";
     }
+    Serial.println(inputMessage);
     request->send_P(200, "text/html", index_html, processor);
+    
   });
   ////////////////////////////////////
   // Send a GET request to <ESP_IP>/update?state=<inputMessage>
-  server.on("/update", HTTP_GET, [](AsyncWebServerRequest* request) {
+  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
     // GET input1 value on <ESP_IP>/update?state=<inputMessage>
@@ -368,22 +336,23 @@ void wifisetup() {  ////////////////////////////////wifi setup//////////////////
       inputMessage = request->getParam(PARAM_INPUT_5)->value();
       inputParam = PARAM_INPUT_5;
       intrvalmtrMode = !intrvalmtrMode;
-    } else {
+    }
+    else {
       inputMessage = "Checkbox error";
       inputParam = "none";
     }
-    Serial.println(((intrvalmtrMode) ? "Intervalometer ON" : "Intervalometer OFF"));
+    Serial.println(inputMessage);
     request->send(200, "text/plain", "OK");
   });
 
   // Send a GET request to <ESP_IP>/state
-  server.on("/state", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(200, "text/plain", ((intrvalmtrMode) ? "1" : ""));
+  server.on("/state", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    request->send(200, "text/plain",((intrvalmtrMode)?"1":"") );
   });
   //////////////////////////////////////////////////////////////////////////////////////
   server.onNotFound(notFound);
   server.begin();
-}
+  }
 
 void setup() {
   Serial.begin(115200);
@@ -392,11 +361,11 @@ void setup() {
 
   /////////////////////////////////////////////////////////////////////////////
   FastLED.addLeds<LED_TYPE, RGB_PIN>(leds, NUM_LEDS);  //Initialize RGB LED
-  /////////////////////////////////////////////////////////////////////////////
+                                                        /////////////////////////////////////////////////////////////////////////////
   pinMode(focusPin, OUTPUT);
   pinMode(shutterPin, OUTPUT);
   BLEDevice::init("");
-
+  
   // Retrieve a Scanner and set the callback we want to use to be informed when we
   // have detected a new device.  Specify that we want active scanning and start the
   // scan to run for 5 seconds.
@@ -408,7 +377,7 @@ void setup() {
   pBLEScan->start(5, false);
 
   //wifisetup();
-
+  
 }  // End of setup.
 
 
